@@ -600,7 +600,7 @@ document.getElementById('btn-open-document').addEventListener('click', async () 
       renderDocumentPanel(result.node, result.can_activate, result.missing_fields, result.edge_count || 0);
       if (result.suggested_nodes && result.suggested_nodes.length > 0) {
         STATE.pendingSuggested = result.suggested_nodes;
-        renderSuggestedNodes(result.suggested_nodes, capturedNodeId);
+        renderSuggestedNodes(capturedNodeId, result.suggested_nodes);
         toast(`AI đã tạo tài liệu + ${result.suggested_nodes.length} gợi ý node liên quan`);
       } else {
         toast('AI đã tạo tài liệu thành công');
@@ -1001,7 +1001,7 @@ async function sendExplore() {
 
     if (mode === 'expand' && result.suggested_nodes && result.suggested_nodes.length) {
       STATE.pendingSuggested = result.suggested_nodes;
-      renderSuggestedNodes(result.suggested_nodes, STATE.selectedNodeId);
+      renderSuggestedNodes(STATE.selectedNodeId, result.suggested_nodes);
     }
   } catch(e) {
     loadingEl.classList.remove('loading');
