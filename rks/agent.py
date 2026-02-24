@@ -111,59 +111,88 @@ class CognitiveAgent:
             return ExploreResponse(reply="Node không tồn tại.")
 
         if self._llm_client:
-            return self._explore_with_llm(req, node)
+            # Build graph context for richer prompt
+            graph_ctx = self._build_graph_context(node)
+            return self._explore_with_llm(req, node, graph_ctx)
         else:
             return self._explore_mock(req, node)
 
-    def _build_system_prompt(self, node: GraphNode, mode: str) -> str:
-        base = f"""Bạn là trợ lý giúp xây dựng Knowledge Graph.
-Node hiện tại:
+    def _build_graph_context(self, node: GraphNode) -> dict:
+        """Gather container info + neighboring nodes + edge relations."""
+        container = self.storage.get_container(node.container_id)
+        edges = self.storage.list_edges(node.container_id)
+        all_nodes = self.storage.list_nodes(node.container_id)
+        node_map = {n.node_id: n for n in all_nodes}
+
+        neighbors = []
+        for e in edges:
+            if e.source_node_id == node.node_id:
+                nb = node_map.get(e.target_node_id)
+                if nb:
+                    neighbors.append({"title": nb.title, "relation": f"{e.relation_type} →", "definition": nb.definition[:120] if nb.definition else ""})
+            elif e.target_node_id == node.node_id:
+                nb = node_map.get(e.source_node_id)
+                if nb:
+                    neighbors.append({"title": nb.title, "relation": f"← {e.relation_type}", "definition": nb.definition[:120] if nb.definition else ""})
+
+        return {
+            "container_title": container.title if container else "",
+            "container_description": container.description if container else "",
+            "neighbors": neighbors[:8],  # cap at 8
+            "total_nodes": len(all_nodes),
+        }
+
+    def _build_system_prompt(self, node: GraphNode, mode: str, graph_ctx: dict | None = None) -> str:
+        ctx = graph_ctx or {}
+        container_line = f"Domain: {ctx.get('container_title', '')}" + (f" — {ctx.get('container_description', '')}" if ctx.get('container_description') else "")
+        neighbors_text = ""
+        if ctx.get('neighbors'):
+            lines = [f"  • [{nb['relation']}] {nb['title']}" + (f": {nb['definition']}" if nb['definition'] else "") for nb in ctx['neighbors']]
+            neighbors_text = "\nCác nodes liên quan trong graph:\n" + "\n".join(lines)
+
+        base = f"""Bạn là chuyên gia tri thức chuyên sâu, đang hỗ trợ xây dựng Knowledge Graph.
+{container_line}
+
+Node đang được khám phá:
 - Title: {node.title}
 - Type: {node.node_type}
 - Definition: {node.definition or '(chưa có)'}
 - Mechanism: {node.mechanism or '(chưa có)'}
-- Boundary: {node.boundary_conditions or '(chưa có)'}
+- Boundary: {node.boundary_conditions or '(chưa có)'}{neighbors_text}
 
 """
         if mode == "clarify":
-            return base + """Mode: CLARIFY — 3-Tầng Reasoning
+            return base + """Mode: CLARIFY — Deep Reasoning
 
-Trước khi trả lời, hãy suy luận qua 3 tầng (KHÔNG viết tầng này ra ngoài JSON):
+CHIẾN LƯỢC TRẢ LỜI (suy luận nội bộ, không viết ra):
+1. PROBLEM: Câu hỏi này hỏi về cái gì thực sự? (khái niệm/cơ chế/so sánh/nhân-quả/ứng dụng)
+2. KNOWLEDGE: Những mảnh kiến thức NÃO CẦN THIẾT — bỏ qua cái thừa, giữ cái cốt lõi
+3. DEPTH: Phải có ít nhất 1 block giải thích cơ chế hoạt động cụ thể (KHÔNG phải định nghĩa lại)
+4. STRUCTURE: Sắp xếp logic theo axis phù hợp nhất
 
-TẦNG 1 — PROBLEM REASONING: Câu hỏi thuộc loại nào?
-  • khái niệm / so sánh / nguyên nhân-hệ quả / hướng dẫn hành động
-  • Mức trừu tượng: cơ bản / trung cấp / chuyên sâu
-  • Người dùng cần: hiểu / quyết định / áp dụng
+YÊU CẦU CHẤT LƯỢNG:
+- Mỗi block: 3-5 câu THỰC CHẤT — không viết lại tiêu đề dưới dạng câu
+- Dùng ví dụ cụ thể (tên, con số, tình huống thực) khi loại block là example/mechanism/consequence
+- Phải nêu được điều người dùng CHƯA NÓI ĐẾN nhưng cần biết để hiểu sâu
+- Nếu câu hỏi mang tính "nói thêm" / "mở rộng": ưu tiên khía cạnh ÍT RÕ RÀNG nhất, không lặp lại cái đã biết
+- Tuyệt đối không viết text ngoài JSON
 
-TẦNG 2 — KNOWLEDGE REASONING: Những mảnh kiến thức nào thực sự cần?
-  • Xác định khái niệm cốt lõi
-  • Phân biệt: nguyên nhân / cơ chế / hệ quả
-  • Loại bỏ kiến thức thừa không liên quan
-
-TẦNG 3 — STRUCTURE/PRESENTATION: Sắp xếp blocks theo logic phù hợp
-  • axis: overview_to_detail | cause_effect | comparison | action_guide
-  • Mỗi block = 1 ý, 2-4 câu, có quan hệ rõ với block khác
-
-YÊU CẦU NGHIÊM NGẶT:
-- Chỉ trả về JSON hợp lệ, KHÔNG viết text tự do bên ngoài JSON.
-- Số blocks: 3-6, đủ sâu, không dư thừa.
-- block.type chọn từ: definition | mechanism | cause | consequence | principle | comparison | example | action
-- Phải có ít nhất 1 block loại mechanism hoặc cause nếu câu hỏi có tính nhân-quả.
-
-JSON Schema bắt buộc:
+JSON Schema bắt buộc (trả về CHỈ JSON):
 {
-  "summary": "string — tóm tắt trực tiếp câu hỏi trong 1 câu",
+  "summary": "1 câu tóm tắt trực tiếp điều sẽ được giải thích",
   "axis": "overview_to_detail | cause_effect | comparison | action_guide",
   "blocks": [
     {
       "id": "b1",
       "type": "definition | mechanism | cause | consequence | principle | comparison | example | action",
-      "title": "string",
-      "content": ["string", "string"],
+      "title": "tiêu đề block ngắn gọn",
+      "content": ["câu 1 thực chất", "câu 2 thực chất", "câu 3 nếu cần"],
       "relations": { "depends_on": ["b_id"], "leads_to": ["b_id"] }
     }
   ]
-}"""
+}
+
+Số blocks: 4-7. Ít nhất 1 block type=mechanism hoặc type=cause. Ít nhất 1 block type=example hoặc type=consequence."""
         else:
             relation_types = [r.value for r in RelationType]
             node_types = [t.value for t in NodeType]
@@ -180,8 +209,8 @@ Sau câu trả lời, thêm JSON block theo đúng format:
 ]
 ```"""
 
-    def _explore_with_llm(self, req: ExploreRequest, node: GraphNode) -> ExploreResponse:
-        messages = [{"role": "system", "content": self._build_system_prompt(node, req.mode)}]
+    def _explore_with_llm(self, req: ExploreRequest, node: GraphNode, graph_ctx: dict | None = None) -> ExploreResponse:
+        messages = [{"role": "system", "content": self._build_system_prompt(node, req.mode, graph_ctx)}]
         for m in req.history[-6:]:  # max 6 turns context
             messages.append({"role": m.role, "content": m.content})
         messages.append({"role": "user", "content": req.message})
@@ -191,7 +220,7 @@ Sau câu trả lời, thêm JSON block theo đúng format:
                 model=self._model,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=2000,
+                max_tokens=2500,
             )
             reply = resp.choices[0].message.content or ""
 
