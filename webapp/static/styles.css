@@ -523,6 +523,10 @@ html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', sans-serif
 .res-block.type-mechanism   { background: #1a1400; border-color: #eab308; }
 .res-block.type-consequence { background: #1a0d0d; border-color: #ef4444; }
 .res-block.type-example     { background: #0d1a14; border-color: #22c55e; }
+.res-block.type-cause       { background: #1a0f00; border-color: #f97316; }
+.res-block.type-principle   { background: #0f0d1a; border-color: #a78bfa; }
+.res-block.type-comparison  { background: #001a1a; border-color: #06b6d4; }
+.res-block.type-action      { background: #001a0d; border-color: #34d399; }
 
 .res-block-header {
   display: flex;
@@ -543,6 +547,10 @@ html, body { height: 100%; overflow: hidden; font-family: 'Segoe UI', sans-serif
 .type-mechanism   .res-block-badge { background: #854d0e; color: #fef08a; }
 .type-consequence .res-block-badge { background: #991b1b; color: #fecaca; }
 .type-example     .res-block-badge { background: #166534; color: #bbf7d0; }
+.type-cause       .res-block-badge { background: #9a3412; color: #fed7aa; }
+.type-principle   .res-block-badge { background: #4c1d95; color: #ddd6fe; }
+.type-comparison  .res-block-badge { background: #164e63; color: #a5f3fc; }
+.type-action      .res-block-badge { background: #065f46; color: #a7f3d0; }
 
 .res-block-title  { font-weight: 700; color: #e2e8f0; font-size: 12px; }
 

@@ -50,7 +50,7 @@ function _lsSave() {
   try {
     const obj = {};
     for (const [k, v] of STATE.chatHistories.entries()) {
-      // Only persist messages (html will be rebuilt on restore)
+      // Persist messages including blocks data for rehydration
       obj[k] = { messages: v.messages };
     }
     localStorage.setItem(LS_KEY, JSON.stringify(obj));
@@ -880,7 +880,6 @@ function saveChatState() {
   if (key && STATE.chatHistory.length) {
     STATE.chatHistories.set(key, {
       messages: [...STATE.chatHistory],
-      html: document.getElementById('chat-display').innerHTML,
     });
     _lsSave();
   }
@@ -890,19 +889,27 @@ function restoreChatState(key) {
   const saved = key ? STATE.chatHistories.get(key) : null;
   if (saved) {
     STATE.chatHistory = [...saved.messages];
-    // If we have serialised html (same session) use it; otherwise rebuild from messages
-    if (saved.html) {
-      document.getElementById('chat-display').innerHTML = saved.html;
-    } else {
-      // Re-hydrate from messages only (cross-refresh case)
-      const disp = document.getElementById('chat-display');
-      disp.innerHTML = '';
-      for (const m of saved.messages) {
-        const el = document.createElement('div');
-        el.className = `chat-msg ${m.role === 'user' ? 'user' : 'assistant'}`;
+    // Re-hydrate from messages — preserve block card formatting if blocks were stored
+    const disp = document.getElementById('chat-display');
+    disp.innerHTML = '';
+    for (const m of saved.messages) {
+      const el = document.createElement('div');
+      if (m.role === 'user') {
+        el.className = 'chat-msg user';
         el.textContent = m.content;
-        disp.appendChild(el);
+      } else if (m.blocks && m.blocks.length) {
+        // Restore structured block response
+        el.className = 'chat-msg assistant has-blocks';
+        const summaryEl = document.createElement('div');
+        summaryEl.className = 'res-summary';
+        summaryEl.textContent = m.summary || '';
+        el.appendChild(summaryEl);
+        el.appendChild(renderBlockCards(m.blocks));
+      } else {
+        el.className = 'chat-msg assistant';
+        el.textContent = m.content;
       }
+      disp.appendChild(el);
     }
     setTimeout(() => {
       const d = document.getElementById('chat-display');
@@ -988,10 +995,10 @@ async function sendExplore() {
       loadingEl.appendChild(summaryEl);
       const blocksEl = renderBlockCards(result.blocks);
       loadingEl.appendChild(blocksEl);
-      // Store summary + serialised blocks text in history
+      // Store blocks data so we can rehydrate after page refresh
       const serialised = result.reply + '\n' +
         result.blocks.map(b => `[${b.type.toUpperCase()}] ${b.title}: ${b.content.join('; ')}`).join('\n');
-      STATE.chatHistory.push({ role: 'assistant', content: serialised });
+      STATE.chatHistory.push({ role: 'assistant', content: serialised, blocks: result.blocks, summary: result.reply });
     } else {
       loadingEl.textContent = result.reply;
       STATE.chatHistory.push({ role: 'assistant', content: result.reply });

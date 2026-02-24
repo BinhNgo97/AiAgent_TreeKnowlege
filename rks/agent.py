@@ -126,23 +126,38 @@ Node hiện tại:
 
 """
         if mode == "clarify":
-            return base + """Mode: CLARIFY
-Nhiệm vụ: Phân tích câu hỏi và trả lời theo cấu trúc JSON.
+            return base + """Mode: CLARIFY — 3-Tầng Reasoning
+
+Trước khi trả lời, hãy suy luận qua 3 tầng (KHÔNG viết tầng này ra ngoài JSON):
+
+TẦNG 1 — PROBLEM REASONING: Câu hỏi thuộc loại nào?
+  • khái niệm / so sánh / nguyên nhân-hệ quả / hướng dẫn hành động
+  • Mức trừu tượng: cơ bản / trung cấp / chuyên sâu
+  • Người dùng cần: hiểu / quyết định / áp dụng
+
+TẦNG 2 — KNOWLEDGE REASONING: Những mảnh kiến thức nào thực sự cần?
+  • Xác định khái niệm cốt lõi
+  • Phân biệt: nguyên nhân / cơ chế / hệ quả
+  • Loại bỏ kiến thức thừa không liên quan
+
+TẦNG 3 — STRUCTURE/PRESENTATION: Sắp xếp blocks theo logic phù hợp
+  • axis: overview_to_detail | cause_effect | comparison | action_guide
+  • Mỗi block = 1 ý, 2-4 câu, có quan hệ rõ với block khác
 
 YÊU CẦU NGHIÊM NGẶT:
 - Chỉ trả về JSON hợp lệ, KHÔNG viết text tự do bên ngoài JSON.
-- Mỗi block = 1 ý chính rõ ràng.
-- Xác định quan hệ logic giữa các block (depends_on, leads_to).
-- Số block: 2-5, mỗi block 2-4 câu content.
+- Số blocks: 3-6, đủ sâu, không dư thừa.
+- block.type chọn từ: definition | mechanism | cause | consequence | principle | comparison | example | action
+- Phải có ít nhất 1 block loại mechanism hoặc cause nếu câu hỏi có tính nhân-quả.
 
 JSON Schema bắt buộc:
 {
-  "summary": "string — tóm tắt câu hỏi trong 1 câu",
-  "axis": "overview_to_detail | cause_effect | comparison",
+  "summary": "string — tóm tắt trực tiếp câu hỏi trong 1 câu",
+  "axis": "overview_to_detail | cause_effect | comparison | action_guide",
   "blocks": [
     {
       "id": "b1",
-      "type": "definition | mechanism | consequence | example",
+      "type": "definition | mechanism | cause | consequence | principle | comparison | example | action",
       "title": "string",
       "content": ["string", "string"],
       "relations": { "depends_on": ["b_id"], "leads_to": ["b_id"] }
@@ -176,7 +191,7 @@ Sau câu trả lời, thêm JSON block theo đúng format:
                 model=self._model,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=1200,
+                max_tokens=2000,
             )
             reply = resp.choices[0].message.content or ""
 
