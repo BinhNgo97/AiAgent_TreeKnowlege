@@ -1,0 +1,13 @@
+# Không copy vào Docker image
+.env
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+*.md
+.DS_Store
+Thumbs.db

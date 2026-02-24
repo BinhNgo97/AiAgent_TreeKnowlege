@@ -1,0 +1,22 @@
+# Secrets — không bao giờ commit lên git
+.env
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# User data — lưu trên Railway Volume, không vào repo
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/

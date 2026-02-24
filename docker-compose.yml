@@ -1,0 +1,21 @@
+# ── Cognitive Graph Agent — docker-compose.yml ─────────────────────
+# Dùng cho deploy lên VPS hoặc chạy local bằng Docker:
+#   docker compose up -d --build
+
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      # Mount data/ từ host vào container — JSONL data không bị mất khi rebuild
+      - ./data:/app/data
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

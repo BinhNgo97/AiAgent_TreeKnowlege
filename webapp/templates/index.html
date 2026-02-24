@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Cognitive Graph Agent</title>
+  <meta name="app-data" content='{"node_types":{{ node_types|tojson }},"node_states":{{ node_states|tojson }},"relation_types":{{ relation_types|tojson }}}'/>
+  <link rel="stylesheet" href="/static/styles.css"/>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     MAIN LAYOUT — 4 columns
+════════════════════════════════════════════════════════════════════ -->
+<div class="app-layout">
+
+  <!-- ── COL 1 : Knowledge ─────────────────────────────────────────── -->
+  <div class="col col-knowledge">
+    <div class="col-header">Knowledge</div>
+
+    <div class="col-list" id="knowledge-list">
+      <!-- rendered by JS -->
+    </div>
+
+    <div class="col-footer">
+      <button class="btn btn-add" id="btn-add-knowledge">Add</button>
+      <button class="btn btn-rem" id="btn-remove-knowledge">Remove</button>
+    </div>
+  </div>
+
+  <!-- ── COL 2 : Source ────────────────────────────────────────────── -->
+  <div class="col col-source">
+    <div class="col-header">Source</div>
+
+    <div class="col-list" id="source-list">
+      <!-- rendered by JS -->
+    </div>
+
+    <div class="col-footer">
+      <button class="btn btn-add" id="btn-add-source">Add</button>
+      <button class="btn btn-rem" id="btn-remove-source">Remove</button>
+    </div>
+  </div>
+
+  <!-- ── COL 3 : Mindmap ───────────────────────────────────────────── -->
+  <div class="col col-mindmap">
+    <div class="col-header">Mindmap</div>
+
+    <div id="graph-container">
+      <svg id="graph-svg">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8"
+                  refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#888"/>
+          </marker>
+        </defs>
+        <g id="graph-root"></g>
+      </svg>
+      <div id="graph-empty" class="graph-empty">
+        Chọn một Knowledge để xem Mindmap
+      </div>
+    </div>
+
+    <div class="col-footer mindmap-footer">
+      <button class="btn btn-add"  id="btn-add-node">Add</button>
+      <button class="btn btn-rem"  id="btn-remove-node">Remove</button>
+      <button class="btn btn-doc"  id="btn-open-document">Document</button>
+    </div>
+  </div>
+
+  <!-- Vertical drag handle: Mindmap ↔ Right panels -->
+  <div class="col-resize-handle" id="col-resize-handle"></div>
+
+  <!-- ── COL 4 : Right panels ──────────────────────────────────────── -->
+  <div class="col col-right">
+
+    <!-- Document-Node panel -->
+    <div class="right-panel" id="panel-document">
+      <div class="panel-header">Document – Node</div>
+      <div class="panel-body" id="document-body">
+        <div class="panel-guide">
+          <div class="guide-step">
+            <div class="guide-num">1</div>
+            <div class="guide-text"><strong>Chọn node</strong> trong Mindmap bằng cách click vào nó</div>
+          </div>
+          <div class="guide-step">
+            <div class="guide-num">2</div>
+            <div class="guide-text"><strong>Nhấn “Document”</strong> ở thanh dưới Mindmap — form sẽ hiện ra ở đây</div>
+          </div>
+          <div class="guide-step">
+            <div class="guide-num">3</div>
+            <div class="guide-text"><strong>iến các trường</strong> để xây dựng khầng xương node:</div>
+          </div>
+          <ul class="guide-field-list">
+            <li><strong>Definition</strong> <em>— Định nghĩa khái niệm là gì</em></li>
+            <li><strong>Mechanism</strong> <em>— Cơ chế hoạt động, nguyên lý</em></li>
+            <li><strong>Boundary</strong> <em>— Giới hạn, điều kiện áp dụng</em></li>
+            <li><strong>Assumptions</strong> <em>— Các giả định nền tảng</em></li>
+          </ul>
+          <div style="margin-top:8px;font-size:10px;color:#475569">
+            ⚠ Node cần có đủ Definition + Mechanism + Boundary mới có thể chuyển sang trạng thái <strong style="color:#4ade80">ACTIVE</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resize handle -->
+    <div class="panel-resize-handle" id="panel-resize-handle"></div>
+
+    <!-- Explore-Explain panel -->
+    <div class="right-panel" id="panel-explore">
+      <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Explore – Explain Node</span>
+        <button id="btn-clear-chat" title="Xoá lịch sử chat" onclick="clearChatHistory()" style="background:#1e293b;border:1px solid #334155;color:#f87171;cursor:pointer;font-size:11px;padding:2px 8px;border-radius:10px;line-height:1.6;transition:background .15s" onmouseover="this.style.background='#7f1d1d'" onmouseout="this.style.background='#1e293b'">🗑 xoá</button>
+      </div>
+      <div class="panel-body">
+
+        <!-- mode selector -->
+        <div class="explore-modes" id="explore-modes">
+          <label class="mode-btn active" id="mode-clarify-label">
+            <input type="radio" name="explore-mode" value="clarify" checked/> Clarify
+          </label>
+          <label class="mode-btn" id="mode-expand-label">
+            <input type="radio" name="explore-mode" value="expand"/> Expand
+          </label>
+        </div>
+
+        <!-- chat display -->
+        <div class="chat-display" id="chat-display"></div>
+
+        <!-- suggested nodes (expand mode) -->
+        <div class="suggested-area" id="suggested-area" style="display:none"></div>
+
+        <!-- input row -->
+        <div class="chat-input-row">
+          <textarea id="chat-input" placeholder="Đặt câu hỏi..." rows="1" autocomplete="off"></textarea>
+          <button class="btn btn-send" id="btn-send">Gửi ▶</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /col-right -->
+</div><!-- /app-layout -->
+
+
+<!-- ════════════════════════════  MODALS  ════════════════════════════ -->
+
+<!-- Modal: Add Knowledge -->
+<div class="modal-overlay" id="modal-add-knowledge">
+  <div class="modal">
+    <div class="modal-title">Thêm Knowledge</div>
+    <label>Tên chủ đề
+      <input type="text" id="inp-kn-title" placeholder="VD: Kinh tế học"/>
+    </label>
+    <label>Mô tả (tuỳ chọn)
+      <textarea id="inp-kn-desc" rows="2" placeholder="Ghi chú..."></textarea>
+    </label>
+    <div class="modal-footer">
+      <button class="btn btn-add" id="confirm-add-knowledge">Tạo</button>
+      <button class="btn btn-rem" onclick="closeModal('modal-add-knowledge')">Huỷ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add Source -->
+<div class="modal-overlay" id="modal-add-source">
+  <div class="modal">
+    <div class="modal-title">Thêm Source</div>
+    <label>Tên hiển thị
+      <input type="text" id="inp-src-label" placeholder="VD: Kinh tế phần 1.pdf"/>
+    </label>
+    <label>Loại
+      <select id="inp-src-type">
+        <option value="PDF">PDF</option>
+        <option value="URL">URL</option>
+        <option value="TEXT">Text</option>
+      </select>
+    </label>
+    <label>Đường dẫn / URL (tuỳ chọn)
+      <input type="text" id="inp-src-path" placeholder="/path/to/file.pdf hoặc https://..."/>
+    </label>
+    <label>Ghi chú
+      <textarea id="inp-src-notes" rows="2"></textarea>
+    </label>
+    <div class="modal-footer">
+      <button class="btn btn-add" id="confirm-add-source">Thêm</button>
+      <button class="btn btn-rem" onclick="closeModal('modal-add-source')">Huỷ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add Node -->
+<div class="modal-overlay" id="modal-add-node">
+  <div class="modal">
+    <div class="modal-title">Thêm Node</div>
+    <label>Tiêu đề
+      <input type="text" id="inp-node-title" placeholder="VD: Kinh tế vi mô"/>
+    </label>
+    <label>Loại node
+      <select id="inp-node-type">
+        {% for nt in node_types %}
+        <option value="{{nt}}">{{nt}}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="modal-footer">
+      <button class="btn btn-add" id="confirm-add-node">Thêm</button>
+      <button class="btn btn-rem" onclick="closeModal('modal-add-node')">Huỷ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add Edge (khi confirm suggested node) -->
+<div class="modal-overlay" id="modal-add-edge">
+  <div class="modal">
+    <div class="modal-title">Xác nhận liên kết</div>
+    <p id="edge-desc" class="modal-desc"></p>
+    <label>Loại quan hệ
+      <select id="inp-edge-relation">
+        {% for rt in relation_types %}
+        <option value="{{rt}}">{{rt}}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="modal-footer">
+      <button class="btn btn-add" id="confirm-add-edge">Xác nhận</button>
+      <button class="btn btn-rem" onclick="closeModal('modal-add-edge')">Huỷ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edge context panel (floating) -->
+<div id="edge-ctx" class="edge-ctx">
+  <div class="edge-ctx-title">Liên kết</div>
+  <select id="edge-ctx-rel"></select>
+  <div class="edge-ctx-actions">
+    <button class="btn btn-add" onclick="saveEdge()">Lưu</button>
+    <button class="btn btn-rem" onclick="deleteEdge()">Xoá</button>
+    <button class="btn btn-doc" onclick="closeEdgeCtx()">✕</button>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div class="toast" id="toast"></div>
+
+<!-- ════════════════════════════  SCRIPTS  ════════════════════════════ -->
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="/static/app.js?v=11"></script>
+
+</body>
+</html>
